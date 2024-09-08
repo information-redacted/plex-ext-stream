@@ -18,7 +18,7 @@ This is because the transcode session relies on periodic keep-alive requests. If
 This means the temporary session key used to access the stream will be invalidated, and you’ll need to refresh the stream to continue playback.
 
 **⚠️ Plex's Fallback mode is not supported.**  
-The fallback method relies on M3U8 playlists, which always contain your Plex authentication token. Since exposing your token is a security risk, this mode cannot be used.
+Support for the fallback method which relies on M3U8 playlists is currently not implemented. See #1 for more info.
 
 ### How It Works
 When a media item is requested from Plex, the server initiates a transcode session by issuing an MPEG-DASH Manifest request. This request contains your Plex authentication token, which is sensitive information you don't want exposed.
@@ -30,7 +30,7 @@ The userscript intercepts this manifest request and temporarily re-hosts the res
 ### Subtitles
 As we rely on transcoding, it's possible to burn subtitles directly into the video stream. However, at this time, only non-SRT subtitle formats (e.g., ASS or embedded subtitles) are supported for this feature. SRT subtitles seem to be soft-loaded by the client, which means they will not be burned into the video and might not display properly in all external players.
 
-**SRT support will be looked into further in the future.**
+**SRT support is being looked into (see #2).**
 
 ### Use Cases
 - Sharing Plex media in social-VR platforms (VRChat, ChilloutVR, Resonite)
