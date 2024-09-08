@@ -35,3 +35,32 @@ As we rely on transcoding, it's possible to burn subtitles directly into the vid
 ### Use Cases
 - Sharing Plex media in social-VR platforms (VRChat, ChilloutVR, Resonite)
 - Streaming Plex media to devices without native Plex app support but that can handle MPEG-DASH streams.
+
+### Setup
+#### Prerequisites
+You will need to either be able to host your own server (see reference in `server/`), or have access to an existing one;
+The existing reference implementation can be hosted on any PHP-capable server, including shared hosts (cPanel/Plesk/DirectAdmin).
+
+#### Step 1: Install Tampermonkey
+If you haven't already, you'll need to install the Tampermonkey extension for your browser. You can find it here:
+
+- [Tampermonkey for Chrome](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
+- [Tampermonkey for Firefox](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/)
+- [Tampermonkey for Microsoft Edge](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)
+
+#### Step 2: Install the Userscript
+Once Tampermonkey is installed, follow these steps:
+
+1. Open the `.user.js` file in this repo.
+2. Click the "raw" button.
+3. Tampermonkey should automatically detect the userscript and prompt you to install it. Click the **Install** button.
+
+#### Step 3: Script settings
+By default, the script comes with my link-hosting server, which requires an access token. You have to configure the script to have an access token, or use a different server.
+
+Depending on your browser, the steps here may differ, but generally:
+- Go to Plex
+- Click on the Tampermonkey icon in your browser's addon bar
+- Click `Configure External Streaming`
+
+From here, you can configure the server and upload password used.
