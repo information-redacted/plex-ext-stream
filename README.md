@@ -17,8 +17,8 @@ This is because the transcode session relies on periodic keep-alive requests. If
 **⚠️ Changing any video-related settings (audio language, subtitles, quality) will create a new transcode session.**  
 This means the temporary session key used to access the stream will be invalidated, and you’ll need to refresh the stream to continue playback.
 
-**⚠️ Plex's Fallback mode is not supported.**  
-Support for the fallback method which relies on M3U8 playlists is currently not implemented. See [#1](https://github.com/information-redacted/plex-ext-stream/issues/1) for more info.
+**⚠️ Social VR users: If you're facing various stuttering glitches, try using Plex's "fallback mode"**
+You can enable this by going to your Plex Web settings, going to the Debug tab, and enabling "`Use alternate streaming protocol for video playback`"
 
 ### How It Works
 When a media item is requested from Plex, the server initiates a transcode session by issuing an MPEG-DASH Manifest request. This request contains your Plex authentication token, which is sensitive information you don't want exposed.

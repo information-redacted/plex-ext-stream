@@ -25,7 +25,8 @@ let _global = {
     hostingPassword: null,
 
     lastUrl: null,
-    lastResponse: null
+    lastResponse: null,
+    lastMode: null
 }
 
 let gmc = new GM_config({
@@ -91,6 +92,28 @@ function modifySegmentTemplate(_xml, _url) {
     return serializer.serializeToString(xmlDoc);
 }
 
+function modifyM3U8Playlist(_m3u8, _url) {
+    const baseUrl = _url.substring(0, _url.lastIndexOf('/') + 1);
+    return _m3u8.split('\n').map(line => {
+        if (
+            line && !line.startsWith('#') &&
+            !line.startsWith('http') &&
+            !line.startsWith('/')
+        ) {
+            return baseUrl + line;
+        }
+        if (line.startsWith('#EXT-X-MAP:')) {
+            return line.replace(/URI="([^"]+)"/, (match, uri) => {
+                if (!uri.startsWith('http') && !uri.startsWith('/')) {
+                    return `URI="${baseUrl + uri}"`;
+                }
+                return match;
+            });
+        }
+        return line;
+    }).join('\n');
+}
+
 // postToServer sends a POST request containing a URL-encoded form to the server
 // that hosts the .mpd files.
 function postToServer(_url, _data) {
@@ -118,7 +141,6 @@ function postToServer(_url, _data) {
         const urlEncodedData = Object.keys(_data)
             .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(_data[key]))
             .join('&');
-
         xhr.send(urlEncodedData);
     });
 }
@@ -160,7 +182,8 @@ function placeButtonInPlayerBar() {
             streamExternallyButton.addEventListener('click', function() {
                 onButtonClickHandler({
                     'password': _global.hostingPassword,
-                    'content': _global.lastResponse
+                    'content': _global.lastResponse,
+                    'mode': _global.lastMode,
                 })
             });
 
@@ -225,12 +248,21 @@ function checkForMissingButton() {
     XMLHttpRequest.prototype.send = function(body) {
         this.addEventListener('load', function() {
             if (this._url && this._url.includes('/start.mpd')) {
-                console.log("%c[DEBUG - Plex->External]: Captured request!\n\tReqURL: %s\n\tResponse: %s", 'background: #222; color: #bada55', this._url, this.responseText);
+                console.log("%c[XHR - DEBUG - Plex->External - MPD]: Captured request!\n\tReqURL: %s\n\tResponse: %s", 'background: #222; color: #bada55', this._url, this.responseText);
                 const modifiedResponse = modifySegmentTemplate(this.responseText, this._url);
-                console.log("%c[DEBUG - Plex->External]: Altered response: %s", 'background: #222; color: #bada55', modifiedResponse);
+                console.log("%c[XHR - DEBUG - Plex->External - MPD]: Altered response: %s", 'background: #222; color: #bada55', modifiedResponse);
 
                 _global.lastUrl = this._url;
                 _global.lastResponse = modifiedResponse;
+                _global.lastMode = "mpd";
+            } else if (this._url && this._url.includes('/base/index.m3u8')) {
+                console.log("%c[XHR - DEBUG - Plex->External - M3U8]: Captured request!\n\tReqURL: %s\n\tResponse: %s", 'background: #222; color: #bada55', this._url, this.responseText);
+                const modifiedResponse = modifyM3U8Playlist(this.responseText, this._url);
+                console.log("%c[XHR - DEBUG - Plex->External - M3U8]: Altered response: %s", 'background: #222; color: #bada55', modifiedResponse);
+
+                _global.lastUrl = this._url;
+                _global.lastResponse = _global.lastUrl;
+                _global.lastMode = "m3u8";
             }
         });
         originalXHRSend.apply(this, arguments);
@@ -243,12 +275,27 @@ function checkForMissingButton() {
         if (url.includes('/start.mpd')) {
             return originalFetch.apply(this, arguments).then(response => {
                 return response.clone().text().then(text => {
-                    console.log("%c[DEBUG - Plex->External]: Captured request!\n\tReqURL: %s\n\tResponse: %s", 'background: #222; color: #bada55', url, text);
+                    console.log("%c[FETCH - DEBUG - Plex->External - MPD]: Captured request!\n\tReqURL: %s\n\tResponse: %s", 'background: #222; color: #bada55', url, text);
                     const modifiedResponse = modifySegmentTemplate(text, url);
-                    console.log("%c[DEBUG - Plex->External]: Altered response: %s", 'background: #222; color: #bada55', modifiedResponse);
+                    console.log("%c[FETCH - DEBUG - Plex->External - MPD]: Altered response: %s", 'background: #222; color: #bada55', modifiedResponse);
 
                     _global.lastUrl = url;
                     _global.lastResponse = modifiedResponse;
+                    _global.lastMode = "mpd";
+
+                    return response;
+                });
+            });
+        } else if (url.includes('/base/index.m3u8')) {
+            return originalFetch.apply(this, arguments).then(response => {
+                return response.clone().text().then(text => {
+                    console.log("%c[FETCH - DEBUG - Plex->External - M3U8]: Captured request!\n\tReqURL: %s\n\tResponse: %s", 'background: #222; color: #bada55', url, text);
+                    const modifiedResponse = modifyM3U8Playlist(text, url);
+                    console.log("%c[FETCH - DEBUG - Plex->External - M3U8]: Altered response: %s", 'background: #222; color: #bada55', modifiedResponse);
+
+                    _global.lastUrl = url;
+                    _global.lastResponse = _global.lastUrl;
+                    _global.lastMode = "m3u8";
 
                     return response;
                 });
