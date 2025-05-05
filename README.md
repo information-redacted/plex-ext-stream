@@ -1,7 +1,7 @@
 # Plex External Streaming Userscript
 
 ### Overview
-This userscript allows you to play media hosted on a Plex Media Server in third-party players, such as those used in social VR platforms like VRChat, ChilloutVR, and Resonite, without exposing your Plex authentication token. It's also useful for devices that lack official Plex support but can handle MPEG-DASH playback.
+This userscript allows you to play media hosted on a Plex Media Server in third-party players, such as those used in social VR platforms like VRChat, ChilloutVR, and Resonite, without exposing your Plex authentication token. It's also useful for devices that lack official Plex support but can handle MPEG-DASH or HLS playback.
 
 ### Important Notices
 **⚠️ This userscript is in its early stages of development. It has no guarantees to work in your specific setup.**
@@ -17,7 +17,7 @@ This is because the transcode session relies on periodic keep-alive requests. If
 **⚠️ Changing any video-related settings (audio language, subtitles, quality) will create a new transcode session.**  
 This means the temporary session key used to access the stream will be invalidated, and you’ll need to refresh the stream to continue playback.
 
-**⚠️ Social VR users: If you're facing various stuttering glitches, try using Plex's "fallback mode"**
+**⚠️ Social VR users: If you're facing various stuttering glitches, try using Plex's "fallback mode"**  
 You can enable this by going to your Plex Web settings, going to the Debug tab, and enabling "`Use alternate streaming protocol for video playback`"
 
 ### How It Works
