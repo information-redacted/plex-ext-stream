@@ -7,6 +7,7 @@
 // @namespace    https://selfhost.services/
 // @match        https://app.plex.tv/*
 // @match        https://*.plex.direct/*
+// @match        https://clients.plex.tv/api/v2/resources
 // @match        *://*/video/:/transcode/*
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -23,11 +24,15 @@ let window = unsafeWindow;
 let _global = {
     hostingServer: null,
     hostingPassword: null,
+    prefersRemoteUrl: false,
+    allowPlexRelay: false,
 
     lastUrl: null,
     lastResponse: null,
-    lastMode: null
-}
+    lastMode: null,
+
+    localAddressToRemoteMapping: {},
+};
 
 let gmc = new GM_config({
     'id': 'Plex.ExternalStreaming',
@@ -43,16 +48,30 @@ let gmc = new GM_config({
             'label': 'The upload password to use when hosting a link',
             'type': 'text',
             'default': ''
+        },
+        'prefersRemote': {
+            'label': 'Should a remote-first URL be forced?',
+            'type': 'checkbox',
+            'default': false
+        },
+        'allowPlexRelay': {
+            'label': 'Should Plex relays be allowed to be used as remote URLs?',
+            'type': 'checkbox',
+            'default': false
         }
     },
     'events': {
         'init': function() {
             _global.hostingServer = this.get('server');
             _global.hostingPassword = this.get('password');
+            _global.prefersRemoteUrl = this.get('prefersRemote');
+            _global.allowPlexRelay = this.get('allowPlexRelay');
         },
         'save': function() {
             _global.hostingServer = this.get('server');
             _global.hostingPassword = this.get('password');
+            _global.prefersRemoteUrl = this.get('prefersRemote');
+            _global.allowPlexRelay = this.get('allowPlexRelay');
         }
     }
 });
@@ -70,6 +89,14 @@ function modifySegmentTemplate(_xml, _url) {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(_xml, "application/xml");
     const baseUrl = _url.substring(0, _url.lastIndexOf('/') + 1);
+    if (_global.prefersRemoteUrl) {
+        for (const [local, remote] of Object.entries(_global.localAddressToRemoteMapping)) {
+            if (baseUrl.startsWith(local)) {
+                _url = baseUrl.replace(local, remote) + _url.substring(baseUrl.length);
+                break;
+            }
+        }
+    }
 
     const segmentTemplates = xmlDoc.getElementsByTagName("SegmentTemplate");
     for (let segmentTemplate of segmentTemplates) {
@@ -149,6 +176,15 @@ function onButtonClickHandler(_data) {
     if (_data.content === null || _data.content === '') {
         alert('You have not started a stream.')
         return;
+    }
+
+    if (_data.mode === 'm3u8' && _global.prefersRemoteUrl) {
+        for (const [local, remote] of Object.entries(_global.localAddressToRemoteMapping)) {
+            if (_data.content.startsWith(local)) {
+                _data.content = _data.content.replace(local, remote);
+                break;
+            }
+        }
     }
 
     postToServer(_global.hostingServer, _data)
@@ -247,6 +283,47 @@ function checkForMissingButton() {
 
     XMLHttpRequest.prototype.send = function(body) {
         this.addEventListener('load', function() {
+            if (this._url && this._url.includes('clients.plex.tv/api/v2/resources')) {
+                console.log("%c[XHR - DEBUG - Plex->External - RESOURCES]: START", 'background: #222; color: #bada55');
+                let availablePlexServers = JSON.parse(this.responseText);
+                availablePlexServers.forEach(srv => {
+                    console.log("%c[XHR - DEBUG - Plex->External - RESOURCES]: SRV -> Name=%s (%O)", 'background: #222; color: #bada55', srv.name, srv);
+                    let serverLocalAddresses = [];
+                    let serverRemoteAddr = "";
+                    let hasOwnAddress = false;
+                    let hasRelayAddress = false;
+
+                    srv.connections.forEach(conn => {
+                        console.log("%c[XHR - DEBUG - Plex->External - RESOURCES]: SRV -> Name=%s, Conn=%s", 'background: #222; color: #bada55', srv.name, conn.uri);
+                        if (conn.local && !serverLocalAddresses.includes(conn.uri)) {
+                            serverLocalAddresses.push(conn.uri);
+                            return;
+                        }
+
+                        if (!conn.local && !hasOwnAddress) {
+                            if (_global.allowPlexRelay && conn.relay && !hasOwnAddress) {
+                                serverRemoteAddr = conn.uri;
+                                hasRelayAddress = true;
+                                return;
+                            }
+
+                            if (!conn.relay) {
+                                serverRemoteAddr = conn.uri;
+                                hasOwnAddress = true;
+                            }
+                        }
+                    });
+
+                    if (serverRemoteAddr != "") {
+                        serverLocalAddresses.forEach(la => {
+                            _global.localAddressToRemoteMapping[la] = serverRemoteAddr;
+                        });
+                    }
+                })
+
+                console.log("%c[XHR - DEBUG - Plex->External - RESOURCES]: Mapping list: %O", 'background: #222; color: #bada55', _global.localAddressToRemoteMapping);
+            }
+
             if (this._url && this._url.includes('/start.mpd')) {
                 console.log("%c[XHR - DEBUG - Plex->External - MPD]: Captured request!\n\tReqURL: %s\n\tResponse: %s", 'background: #222; color: #bada55', this._url, this.responseText);
                 const modifiedResponse = modifySegmentTemplate(this.responseText, this._url);
@@ -272,6 +349,49 @@ function checkForMissingButton() {
     const originalFetch = window.fetch;
     window.fetch = function(input, init) {
         const url = typeof input === 'string' ? input : input.url;
+
+        if (url && url.includes('clients.plex.tv/api/v2/resources')) {
+            return originalFetch.apply(this, arguments).then(response => {
+                return response.clone().text().then(text => {
+                    let availablePlexServers = JSON.parse(text);
+                    availablePlexServers.forEach(srv => {
+                        let serverLocalAddresses = [];
+                        let serverRemoteAddr = "";
+                        let hasOwnAddress = false;
+                        let hasRelayAddress = false;
+
+                        srv.connections.forEach(conn => {
+                            if (conn.local && !serverLocalAddresses.includes(conn.uri)) {
+                                serverLocalAddresses.push(conn.uri);
+                                return;
+                            }
+
+                            if (!conn.local && !hasOwnAddress) {
+                                if (_global.allowPlexRelay && conn.relay && !hasOwnAddress) {
+                                    serverRemoteAddr = conn.uri;
+                                    hasRelayAddress = true;
+                                    return;
+                                }
+
+                                if (!conn.relay) {
+                                    serverRemoteAddr = conn.uri;
+                                    hasOwnAddress = true;
+                                }
+                            }
+                        });
+
+                        if (serverRemoteAddr != "") {
+                            serverLocalAddresses.forEach(la => {
+                                _global.localAddressToRemoteMapping[la] = serverRemoteAddr;
+                            });
+                        }
+                    })
+
+                    console.log("%c[FETCH - DEBUG - Plex->External - RESOURCES]: Mapping list: %O", 'background: #222; color: #bada55', _global.localAddressToRemoteMapping);
+                });
+            });
+        }
+
         if (url.includes('/start.mpd')) {
             return originalFetch.apply(this, arguments).then(response => {
                 return response.clone().text().then(text => {
